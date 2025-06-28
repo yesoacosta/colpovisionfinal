@@ -6,7 +6,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RL
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
-import tempfile
 import os
 
 st.set_page_config(page_title="ColpoVision Final", layout="wide")
@@ -76,21 +75,24 @@ if uploaded_img:
         story.append(Paragraph(impresion, styles['Normal']))
         story.append(Spacer(1, 24))
         
-        # Manejo corregido de la imagen
+        # Manejo corregido de la imagen - SIN archivos temporales
         try:
-            # Crear un archivo temporal para la imagen
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                # Abrir la imagen subida
-                image_stream = Image.open(uploaded_img)
-                # Convertir a RGB si es necesario (para PNG con transparencia)
-                if image_stream.mode in ("RGBA", "P"):
-                    image_stream = image_stream.convert("RGB")
-                # Guardar en el archivo temporal
-                image_stream.save(tmp_file.name, format='JPEG')
-                # Agregar la imagen al PDF
-                story.append(RLImage(tmp_file.name, width=12*cm, height=9*cm))
-                # Limpiar el archivo temporal después de usar
-                os.unlink(tmp_file.name)
+            # Abrir la imagen directamente desde el buffer
+            uploaded_img.seek(0)  # Volver al inicio del archivo
+            image_stream = Image.open(uploaded_img)
+            
+            # Convertir a RGB si es necesario (para PNG con transparencia)
+            if image_stream.mode in ("RGBA", "P"):
+                image_stream = image_stream.convert("RGB")
+            
+            # Crear un buffer en memoria para la imagen
+            img_buffer = BytesIO()
+            image_stream.save(img_buffer, format='JPEG')
+            img_buffer.seek(0)
+            
+            # Agregar la imagen al PDF directamente desde el buffer
+            story.append(RLImage(img_buffer, width=12*cm, height=9*cm))
+            
         except Exception as e:
             st.error(f"Error al procesar la imagen: {str(e)}")
             story.append(Paragraph("Imagen no disponible para impresión", styles['Normal']))
