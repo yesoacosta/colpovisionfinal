@@ -1,4 +1,3 @@
-
 import streamlit as st
 from datetime import datetime
 from io import BytesIO
@@ -7,6 +6,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RL
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
+import tempfile
+import os
 
 st.set_page_config(page_title="ColpoVision Final", layout="wide")
 st.title("🩺 ColpoVision – Diagnóstico IA + Informe Profesional")
@@ -74,20 +75,47 @@ if uploaded_img:
         story.append(Paragraph("Impresión diagnóstica:", styles['Heading3']))
         story.append(Paragraph(impresion, styles['Normal']))
         story.append(Spacer(1, 24))
+        
+        # Manejo corregido de la imagen
         try:
-            image_stream = Image.open(uploaded_img)
-            img_path = "/tmp/image_temp.jpg"
-            image_stream.save(img_path)
-            story.append(RLImage(img_path, width=12*cm, height=9*cm))
-        except:
+            # Crear un archivo temporal para la imagen
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                # Abrir la imagen subida
+                image_stream = Image.open(uploaded_img)
+                # Convertir a RGB si es necesario (para PNG con transparencia)
+                if image_stream.mode in ("RGBA", "P"):
+                    image_stream = image_stream.convert("RGB")
+                # Guardar en el archivo temporal
+                image_stream.save(tmp_file.name, format='JPEG')
+                # Agregar la imagen al PDF
+                story.append(RLImage(tmp_file.name, width=12*cm, height=9*cm))
+                # Limpiar el archivo temporal después de usar
+                os.unlink(tmp_file.name)
+        except Exception as e:
+            st.error(f"Error al procesar la imagen: {str(e)}")
             story.append(Paragraph("Imagen no disponible para impresión", styles['Normal']))
+        
         story.append(Spacer(1, 12))
         story.append(Paragraph("Firma digital:", styles['Normal']))
+        
+        # Manejo corregido de la firma - buscar si existe el archivo
         try:
-            story.append(RLImage("firma_yesid.png", width=5*cm, height=2*cm))
-        except:
-            story.append(Paragraph("[Firma]", styles['Normal']))
+            if os.path.exists("firma_yesid.png"):
+                story.append(RLImage("firma_yesid.png", width=5*cm, height=2*cm))
+            else:
+                story.append(Paragraph("Dr. Yesid Acosta Peinado", styles['Normal']))
+                story.append(Paragraph("Ginecólogo y Obstetra", styles['Normal']))
+                story.append(Paragraph("M.P. 33210 – M.E. 16665", styles['Normal']))
+        except Exception as e:
+            st.error(f"Error al cargar la firma: {str(e)}")
+            story.append(Paragraph("Dr. Yesid Acosta Peinado", styles['Normal']))
+            story.append(Paragraph("Ginecólogo y Obstetra", styles['Normal']))
+            story.append(Paragraph("M.P. 33210 – M.E. 16665", styles['Normal']))
 
-        doc.build(story)
-        buffer.seek(0)
-        st.download_button("📥 Descargar informe PDF", buffer, "informe_colposcopico.pdf", mime="application/pdf")
+        try:
+            doc.build(story)
+            buffer.seek(0)
+            st.download_button("📥 Descargar informe PDF", buffer, "informe_colposcopico.pdf", mime="application/pdf")
+            st.success("✅ PDF generado correctamente!")
+        except Exception as e:
+            st.error(f"Error al generar el PDF: {str(e)}")
